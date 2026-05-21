@@ -1,4 +1,4 @@
-import pool from '../connection';
+import { Client } from 'pg';
 
 const schema = `
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
@@ -149,16 +149,25 @@ CREATE INDEX IF NOT EXISTS idx_typing_indicators_expires_at ON typing_indicators
 `;
 
 export async function runMigrations() {
-  const client = await pool.connect();
+  const databaseUrl = process.env.DATABASE_URL || process.env.DB_URL;
+  const isRemoteConnection = databaseUrl && !databaseUrl.includes('localhost') && !databaseUrl.includes('127.0.0.1');
+
+  // Spawn an isolated migration client that forces SSL rules safely
+  const client = new Client({
+    connectionString: databaseUrl,
+    ssl: isRemoteConnection ? { rejectUnauthorized: false } : false,
+  });
+
   try {
     console.log('Running database migrations...');
+    await client.connect();
     await client.query(schema);
     console.log('✓ Database migrations completed successfully');
   } catch (error) {
     console.error('✗ Migration failed:', error);
     throw error;
   } finally {
-    client.release();
+    await client.end();
   }
 }
 
