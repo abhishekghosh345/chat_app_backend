@@ -150,13 +150,23 @@ CREATE INDEX IF NOT EXISTS idx_typing_indicators_expires_at ON typing_indicators
 
 export async function runMigrations() {
   const databaseUrl = process.env.DATABASE_URL || process.env.DB_URL;
-  const isRemoteConnection = databaseUrl && !databaseUrl.includes('localhost') && !databaseUrl.includes('127.0.0.1');
 
-  // Spawn an isolated migration client that forces SSL rules safely
-  const client = new Client({
-    connectionString: databaseUrl,
-    ssl: isRemoteConnection ? { rejectUnauthorized: false } : false,
-  });
+  // Explicit configuration parameters to guarantee execution safety
+  const clientConfig = databaseUrl
+    ? {
+        connectionString: databaseUrl,
+        ssl: { rejectUnauthorized: false }, // Enforce bypass directly
+      }
+    : {
+        host: process.env.DB_HOST || 'localhost',
+        port: parseInt(process.env.DB_PORT || '5432'),
+        user: process.env.DB_USER || 'postgres',
+        password: process.env.DB_PASSWORD || 'postgres',
+        database: process.env.DB_NAME || 'chat_app',
+        ssl: false,
+      };
+
+  const client = new Client(clientConfig);
 
   try {
     console.log('Running database migrations...');
