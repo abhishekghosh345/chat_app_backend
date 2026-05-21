@@ -151,20 +151,48 @@ CREATE INDEX IF NOT EXISTS idx_typing_indicators_expires_at ON typing_indicators
 export async function runMigrations() {
   const databaseUrl = process.env.DATABASE_URL || process.env.DB_URL;
 
-  // Explicit configuration parameters to guarantee execution safety
-  const clientConfig = databaseUrl
-    ? {
-        connectionString: databaseUrl,
-        ssl: { rejectUnauthorized: false }, // Enforce bypass directly
+  let clientConfig: any;
+
+  if (databaseUrl && !databaseUrl.includes('localhost')) {
+    try {
+      // Manually parse the URL to bypass the faulty pg string driver configuration loader
+      const urlPattern = /postgres(?:ql)?:\/\/([^:]+):([^@]+)@([^:/]+):([0-9]+)\/([^?s]+)/;
+      const match = databaseUrl.match(urlPattern);
+
+      if (match) {
+        const [, user, password, host, port, database] = match;
+        clientConfig = {
+          user,
+          password,
+          host,
+          port: parseInt(port, 10),
+          database,
+          ssl: { rejectUnauthorized: false }, // Explicitly force authorization bypass
+        };
+      } else {
+        // Fallback directly to the raw string if the pattern match edge case fails
+        clientConfig = {
+          connectionString: databaseUrl,
+          ssl: { rejectUnauthorized: false },
+        };
       }
-    : {
-        host: process.env.DB_HOST || 'localhost',
-        port: parseInt(process.env.DB_PORT || '5432'),
-        user: process.env.DB_USER || 'postgres',
-        password: process.env.DB_PASSWORD || 'postgres',
-        database: process.env.DB_NAME || 'chat_app',
-        ssl: false,
+    } catch (e) {
+      clientConfig = {
+        connectionString: databaseUrl,
+        ssl: { rejectUnauthorized: false },
       };
+    }
+  } else {
+    // Local dev configuration
+    clientConfig = {
+      host: process.env.DB_HOST || 'localhost',
+      port: parseInt(process.env.DB_PORT || '5432', 10),
+      user: process.env.DB_USER || 'postgres',
+      password: process.env.DB_PASSWORD || 'postgres',
+      database: process.env.DB_NAME || 'chat_app',
+      ssl: false,
+    };
+  }
 
   const client = new Client(clientConfig);
 
@@ -176,12 +204,11 @@ export async function runMigrations() {
   } catch (error) {
     console.error('✗ Migration failed:', error);
     throw error;
-  } finally {
+  } file {
     await client.end();
   }
 }
 
-// Run migrations if this file is executed directly
 if (require.main === module) {
   runMigrations()
     .then(() => process.exit(0))
