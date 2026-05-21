@@ -204,7 +204,7 @@ export async function runMigrations() {
   } catch (error) {
     console.error('✗ Migration failed:', error);
     throw error;
-  } file {
+  } finally {
     await client.end();
   }
 }
