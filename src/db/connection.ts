@@ -6,14 +6,14 @@ dotenv.config();
 // Grab Render's connection string environment variable
 const databaseUrl = process.env.DATABASE_URL || process.env.DB_URL;
 
-// Determine configuration dynamically based on whether DATABASE_URL is present
+// Fail-safe check: If it uses a connection string and isn't pointing to localhost, apply SSL bypass
+const isRemoteConnection = databaseUrl && !databaseUrl.includes('localhost') && !databaseUrl.includes('127.0.0.1');
+
 const poolConfig = databaseUrl
   ? {
       connectionString: databaseUrl,
-      // Enforce bypassing self-signed certificate restrictions when deployed
-      ssl: process.env.NODE_ENV === 'production' 
-        ? { rejectUnauthorized: false } 
-        : false,
+      // Force bypass self-signed certificate restrictions for all remote cloud connections
+      ssl: isRemoteConnection ? { rejectUnauthorized: false } : false,
     }
   : {
       // Fallback variables used exclusively for your local development environment
@@ -27,10 +27,11 @@ const poolConfig = databaseUrl
 
 const pool = new Pool(poolConfig);
 
-// Clean diagnostic log showing exactly what the app is picking up
+// Clean diagnostic log
 console.log('DB target initialized:', {
   usingConnectionString: !!databaseUrl,
-  environment: process.env.NODE_ENV || 'development',
+  isRemoteConnection: !!isRemoteConnection,
+  environment: process.env.NODE_ENV || 'not set',
 });
 
 pool.on('error', (err: any) => {
