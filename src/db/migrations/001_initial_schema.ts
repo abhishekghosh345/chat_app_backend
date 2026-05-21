@@ -1,5 +1,8 @@
 import { Client } from 'pg';
 
+// Force Node.js to accept self-signed certificates for the migration process
+process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+
 const schema = `
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
@@ -151,50 +154,10 @@ CREATE INDEX IF NOT EXISTS idx_typing_indicators_expires_at ON typing_indicators
 export async function runMigrations() {
   const databaseUrl = process.env.DATABASE_URL || process.env.DB_URL;
 
-  let clientConfig: any;
-
-  if (databaseUrl && !databaseUrl.includes('localhost')) {
-    try {
-      // Manually parse the URL to bypass the faulty pg string driver configuration loader
-      const urlPattern = /postgres(?:ql)?:\/\/([^:]+):([^@]+)@([^:/]+):([0-9]+)\/([^?s]+)/;
-      const match = databaseUrl.match(urlPattern);
-
-      if (match) {
-        const [, user, password, host, port, database] = match;
-        clientConfig = {
-          user,
-          password,
-          host,
-          port: parseInt(port, 10),
-          database,
-          ssl: { rejectUnauthorized: false }, // Explicitly force authorization bypass
-        };
-      } else {
-        // Fallback directly to the raw string if the pattern match edge case fails
-        clientConfig = {
-          connectionString: databaseUrl,
-          ssl: { rejectUnauthorized: false },
-        };
-      }
-    } catch (e) {
-      clientConfig = {
-        connectionString: databaseUrl,
-        ssl: { rejectUnauthorized: false },
-      };
-    }
-  } else {
-    // Local dev configuration
-    clientConfig = {
-      host: process.env.DB_HOST || 'localhost',
-      port: parseInt(process.env.DB_PORT || '5432', 10),
-      user: process.env.DB_USER || 'postgres',
-      password: process.env.DB_PASSWORD || 'postgres',
-      database: process.env.DB_NAME || 'chat_app',
-      ssl: false,
-    };
-  }
-
-  const client = new Client(clientConfig);
+  const client = new Client({
+    connectionString: databaseUrl,
+    ssl: databaseUrl && !databaseUrl.includes('localhost') ? { rejectUnauthorized: false } : false
+  });
 
   try {
     console.log('Running database migrations...');
