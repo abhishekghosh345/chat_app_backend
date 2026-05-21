@@ -3,54 +3,34 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-function envHasUrl(value?: string) {
-  return !!value && /^postgres(ql)?:\/\//i.test(value);
-}
-
+// Grab Render's connection string environment variable
 const databaseUrl = process.env.DATABASE_URL || process.env.DB_URL;
-const hostOrUrl = process.env.DB_HOST;
 
-function shouldUseSslForHost(host?: string) {
-  if (!host) return false;
-  // Render Postgres commonly requires SSL even when you're provided host/user/password separately.
-  // Heuristic: any non-localhost host should use SSL; Render domains typically end with render.com.
-  const isLocal = /^localhost$|^127\.0\.0\.1$/.test(host);
-  const looksLikeRender = /\.render\.com$/i.test(host) || /render\.com$/i.test(host);
-  return !isLocal || looksLikeRender;
-}
+// Determine configuration dynamically based on whether DATABASE_URL is present
+const poolConfig = databaseUrl
+  ? {
+      connectionString: databaseUrl,
+      // Enforce bypassing self-signed certificate restrictions when deployed
+      ssl: process.env.NODE_ENV === 'production' 
+        ? { rejectUnauthorized: false } 
+        : false,
+    }
+  : {
+      // Fallback variables used exclusively for your local development environment
+      host: process.env.DB_HOST || 'localhost',
+      port: parseInt(process.env.DB_PORT || '5432'),
+      user: process.env.DB_USER || 'postgres',
+      password: process.env.DB_PASSWORD || 'postgres',
+      database: process.env.DB_NAME || 'chat_app',
+      ssl: false,
+    };
 
+const pool = new Pool(poolConfig);
 
-// Prefer a single connection string when available (Render commonly requires SSL).
-// Otherwise fall back to individual env vars.
-const pool = new Pool({
-  ...(databaseUrl
-    ? {
-        connectionString: databaseUrl,
-        ssl: { rejectUnauthorized: false },
-      }
-    : envHasUrl(hostOrUrl)
-      ? {
-          connectionString: hostOrUrl,
-          ssl: { rejectUnauthorized: false },
-        }
-      : {
-          host: process.env.DB_HOST || 'localhost',
-          port: parseInt(process.env.DB_PORT || '5432'),
-          user: process.env.DB_USER || 'postgres',
-          password: process.env.DB_PASSWORD || 'postgres',
-          database: process.env.DB_NAME || 'chat_app',
-          ssl: shouldUseSslForHost(hostOrUrl) ? { rejectUnauthorized: false } : undefined,
-        }),
-});
-
-
-// Helpful debug to catch misconfigured DB_HOST/DB_PORT early
-console.log('DB target:', {
-  databaseUrl: databaseUrl ? '[set]' : undefined,
-  dbHost: hostOrUrl || 'localhost',
-  dbPort: process.env.DB_PORT ? parseInt(process.env.DB_PORT) : 5432,
-  dbUser: process.env.DB_USER || 'postgres',
-  dbName: process.env.DB_NAME || 'chat_app',
+// Clean diagnostic log showing exactly what the app is picking up
+console.log('DB target initialized:', {
+  usingConnectionString: !!databaseUrl,
+  environment: process.env.NODE_ENV || 'development',
 });
 
 pool.on('error', (err: any) => {
@@ -80,4 +60,3 @@ export async function getClient() {
 export async function closePool() {
   await pool.end();
 }
-
