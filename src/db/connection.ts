@@ -3,6 +3,11 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
+// Force Node.js to accept self-signed certificates globally in production/Render environments
+if (process.env.NODE_ENV === 'production') {
+  process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+}
+
 // Grab Render's connection string environment variable
 const databaseUrl = process.env.DATABASE_URL || process.env.DB_URL;
 
