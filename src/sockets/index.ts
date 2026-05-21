@@ -151,12 +151,16 @@ export function attachSocketHandlers(httpServer: HttpServer) {
       io.to(`chat:${chatId}`).emit('reaction_update', { chatId, reaction });
     });
 
+    // ─── OPTIMIZED WEBRTC HANDLERS ───
+
     socket.on('call_offer', async (data: any) => {
       const { chatId, callType, offer, receiverId } = data || {};
       if (!chatId || !callType || !offer) return;
 
       const call = await CallService.createCallRecord(userId, receiverId, callType);
-      io.to(`chat:${chatId}`).emit('call_offer', {
+      
+      // FIX: Use socket.to so the caller DOES NOT get their own offer back!
+      socket.to(`chat:${chatId}`).emit('call_offer', {
         chatId,
         call,
         offer,
@@ -168,7 +172,9 @@ export function attachSocketHandlers(httpServer: HttpServer) {
       if (!chatId || !callId || !answer) return;
 
       await CallService.updateCallStatus(callId, 'active');
-      io.to(`chat:${chatId}`).emit('call_answer', { chatId, callId, answer });
+      
+      // FIX: Use socket.to so the answer routes directly to the caller
+      socket.to(`chat:${chatId}`).emit('call_answer', { chatId, callId, answer });
     });
 
     socket.on('call_end', async (data: any) => {
@@ -183,7 +189,7 @@ export function attachSocketHandlers(httpServer: HttpServer) {
       const { chatId, candidate } = data || {};
       if (!chatId || !candidate) return;
       
-      // Relay the ICE candidate to the other participants in the chat
+      // Relay the candidate safely to the peer only
       socket.to(`chat:${chatId}`).emit('ice_candidate', { chatId, candidate, userId });
     });
 
@@ -206,4 +212,3 @@ export function attachSocketHandlers(httpServer: HttpServer) {
 
   return io;
 }
-
