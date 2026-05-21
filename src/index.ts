@@ -33,7 +33,7 @@ app.use(
 );
 app.use(express.json({ limit: '2mb' }));
 
-app.get('/healthz', (_req, res) => {
+app.get('/healthz', (_req: express.Request, res: express.Response) => {
   res.json({ ok: true });
 });
 
